@@ -1,0 +1,15 @@
+id,title,department,base_salary
+1,Junior Software Engineer,Engineering,60000
+2,Senior Software Engineer,Engineering,120000
+3,Product Manager,Product,100000
+4,Data Scientist,Data Science,110000
+5,HR Business Partner,Human Resources,80000
+6,Sales Executive,Sales,50000
+7,Marketing Coordinator,Marketing,55000
+8,Financial Controller,Finance,95000
+9,UX/UI Designer,Design,85000
+10,DevOps Engineer,Infrastructure,115000
+11,Customer Success Manager,Operations,70000
+12,CTO,Executive,200000
+13,CFO,Executive,190000
+14,Office Manager,Administration,50000
