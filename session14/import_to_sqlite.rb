@@ -2,26 +2,30 @@ require 'sqlite3'
 require 'csv'
 
 db_file = "company.db"
-
-# Remove existing DB to start fresh with new schema
 File.delete(db_file) if File.exist?(db_file)
 
-# Connect to SQLite
 db = SQLite3::Database.new(db_file)
 
-puts "Creating tables with new schema..."
+puts "Creating normalized tables..."
 
-# Create job_titles table
+# 1. Departments
+db.execute "CREATE TABLE departments (id INTEGER PRIMARY KEY, name TEXT);"
+
+# 2. Education
+db.execute "CREATE TABLE education (id INTEGER PRIMARY KEY, degree TEXT);"
+
+# 3. Job Titles
 db.execute <<-SQL
   CREATE TABLE job_titles (
     id INTEGER PRIMARY KEY,
     title TEXT,
-    department TEXT,
-    base_salary INTEGER
+    department_id INTEGER,
+    base_salary INTEGER,
+    FOREIGN KEY (department_id) REFERENCES departments(id)
   );
 SQL
 
-# Create employees table with gender, birth_date, department, and resign_date
+# 4. Employees
 db.execute <<-SQL
   CREATE TABLE employees (
     id INTEGER PRIMARY KEY,
@@ -31,33 +35,55 @@ db.execute <<-SQL
     gender TEXT,
     birth_date DATE,
     job_title_id INTEGER,
-    department TEXT,
+    education_id INTEGER,
     salary INTEGER,
     hire_date DATE,
     resign_date DATE,
-    FOREIGN KEY (job_title_id) REFERENCES job_titles(id)
+    FOREIGN KEY (job_title_id) REFERENCES job_titles(id),
+    FOREIGN KEY (education_id) REFERENCES education(id)
   );
 SQL
 
-puts "Importing job titles..."
-CSV.foreach("job_titles.csv", headers: true) do |row|
-  db.execute("INSERT INTO job_titles (id, title, department, base_salary) VALUES (?, ?, ?, ?)",
-             [row['id'], row['title'], row['department'], row['base_salary']])
+# 5. Employee Satisfaction (NPS)
+db.execute <<-SQL
+  CREATE TABLE employee_satisfaction (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER,
+    score INTEGER,
+    survey_date DATE,
+    feedback TEXT,
+    FOREIGN KEY (employee_id) REFERENCES employees(id)
+  );
+SQL
+
+# Import Data
+puts "Importing lookup tables..."
+CSV.foreach("departments.csv", headers: true) { |row| db.execute("INSERT INTO departments VALUES (?,?)", [row['id'], row['name']]) }
+CSV.foreach("education.csv", headers: true) { |row| db.execute("INSERT INTO education VALUES (?,?)", [row['id'], row['degree']]) }
+CSV.foreach("job_titles.csv", headers: true) { |row| db.execute("INSERT INTO job_titles VALUES (?,?,?,?)", [row['id'], row['title'], row['department_id'], row['base_salary']]) }
+
+puts "Importing employees..."
+CSV.foreach("employees.csv", headers: true) do |r|
+  db.execute("INSERT INTO employees VALUES (?,?,?,?,?,?,?,?,?,?,?)", 
+    [r['id'], r['first_name'], r['last_name'], r['email'], r['gender'], r['birth_date'], r['job_title_id'], r['education_id'], r['salary'], r['hire_date'], r['resign_date']])
 end
 
-puts "Importing employees with resignation data..."
-CSV.foreach("employees.csv", headers: true) do |row|
-  db.execute("INSERT INTO employees (id, first_name, last_name, email, gender, birth_date, job_title_id, department, salary, hire_date, resign_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-             [row['id'], row['first_name'], row['last_name'], row['email'], row['gender'], row['birth_date'], row['job_title_id'], row['department'], row['salary'], row['hire_date'], row['resign_date']])
+puts "Importing satisfaction scores..."
+CSV.foreach("satisfaction.csv", headers: true) do |r|
+  db.execute("INSERT INTO employee_satisfaction (employee_id, score, survey_date, feedback) VALUES (?,?,?,?)", 
+    [r['employee_id'], r['score'], r['survey_date'], r['feedback']])
 end
 
-# Verify
-count = db.get_first_value("SELECT COUNT(*) FROM employees")
-resigned_count = db.get_first_value("SELECT COUNT(*) FROM employees WHERE resign_date IS NOT NULL")
-sample = db.get_first_row("SELECT * FROM employees WHERE resign_date IS NOT NULL LIMIT 1")
+# Calculate NPS
+puts "\nCalculating Net Promoter Score (NPS)..."
+total = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction").to_f
+promoters = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction WHERE score >= 9").to_f
+detractors = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction WHERE score <= 6").to_f
 
-puts "Successfully imported #{count} employees into #{db_file}."
-puts "Total Resigned: #{resigned_count}"
-puts "Sample Resigned record: #{sample.inspect}"
+nps = ((promoters / total) * 100) - ((detractors / total) * 100)
+puts "Total Responses: #{total.to_i}"
+puts "Promoters (9-10): #{promoters.to_i}"
+puts "Detractors (0-6): #{detractors.to_i}"
+puts "Company NPS Score: #{nps.round(2)}"
 
 db.close
