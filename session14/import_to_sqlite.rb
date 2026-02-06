@@ -56,6 +56,17 @@ db.execute <<-SQL
   );
 SQL
 
+# 6. Salary History
+db.execute <<-SQL
+  CREATE TABLE salary_histories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER,
+    salary INTEGER,
+    effective_date DATE,
+    FOREIGN KEY (employee_id) REFERENCES employees(id)
+  );
+SQL
+
 # Import Data
 puts "Importing lookup tables..."
 CSV.foreach("departments.csv", headers: true) { |row| db.execute("INSERT INTO departments VALUES (?,?)", [row['id'], row['name']]) }
@@ -74,16 +85,20 @@ CSV.foreach("satisfaction.csv", headers: true) do |r|
     [r['employee_id'], r['score'], r['survey_date'], r['feedback']])
 end
 
-# Calculate NPS
-puts "\nCalculating Net Promoter Score (NPS)..."
-total = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction").to_f
-promoters = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction WHERE score >= 9").to_f
-detractors = db.get_first_value("SELECT COUNT(*) FROM employee_satisfaction WHERE score <= 6").to_f
+puts "Importing salary histories..."
+CSV.foreach("salary_history.csv", headers: true) do |r|
+  db.execute("INSERT INTO salary_histories (employee_id, salary, effective_date) VALUES (?,?,?)", 
+    [r['employee_id'], r['salary'], r['effective_date']])
+end
 
-nps = ((promoters / total) * 100) - ((detractors / total) * 100)
-puts "Total Responses: #{total.to_i}"
-puts "Promoters (9-10): #{promoters.to_i}"
-puts "Detractors (0-6): #{detractors.to_i}"
-puts "Company NPS Score: #{nps.round(2)}"
+# Verification
+count = db.get_first_value("SELECT COUNT(*) FROM salary_histories")
+puts "Successfully imported #{count} salary history records."
+
+# Sample query for trend
+puts "\nSample Salary Trend for Employee #1:"
+db.execute("SELECT salary, effective_date FROM salary_histories WHERE employee_id = 1 ORDER BY effective_date ASC") do |row|
+  p row
+end
 
 db.close

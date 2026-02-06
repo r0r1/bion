@@ -57,49 +57,81 @@ CSV.open("departments.csv", "wb") { |csv| csv << ["id", "name"]; departments_lis
 CSV.open("education.csv", "wb") { |csv| csv << ["id", "degree"]; education_list.each { |e| csv << [e[:id], e[:degree]] } }
 CSV.open("job_titles.csv", "wb") { |csv| csv << ["id", "title", "department_id", "base_salary"]; job_titles_list.each { |j| csv << [j[:id], j[:title], j[:dept_id], j[:base_salary]] } }
 
-# Generate Employees and Satisfaction Data
+# Generate Employees, Satisfaction, and Salary History Data
 resigned_indices = (0...RECORD_COUNT).to_a.sample(RESIGN_COUNT)
 
 CSV.open("employees.csv", "wb") do |csv_emp|
   CSV.open("satisfaction.csv", "wb") do |csv_sat|
-    csv_emp << ["id", "first_name", "last_name", "email", "gender", "birth_date", "job_title_id", "education_id", "salary", "hire_date", "resign_date"]
-    csv_sat << ["employee_id", "score", "survey_date", "feedback"]
+    CSV.open("salary_history.csv", "wb") do |csv_sal|
+      csv_emp << ["id", "first_name", "last_name", "email", "gender", "birth_date", "job_title_id", "education_id", "salary", "hire_date", "resign_date"]
+      csv_sat << ["employee_id", "score", "survey_date", "feedback"]
+      csv_sal << ["employee_id", "salary", "effective_date"]
 
-    RECORD_COUNT.times do |i|
-      emp_id = i + 1
-      gender = ["Male", "Female"].sample
-      first_name = gender == "Male" ? male_names.sample : female_names.sample
-      last_name = last_names.sample
-      email = "#{first_name.downcase}.#{last_name.downcase}.#{emp_id}@example-corp.com"
-      birth_date = Date.today - (20 * 365 + rand(45 * 365))
-      
-      job = job_titles_list.sample
-      education = education_list.sample
-      
-      edu_bonus = case education[:id]
-                  when 5 then 1.10
-                  when 4 then 1.05
-                  when 1 then 0.95
-                  else 1.0
-                  end
-      
-      variance = (job[:base_salary] * edu_bonus * 0.15 * (rand - 0.5)).to_i
-      salary = (job[:base_salary] * edu_bonus).to_i + variance
-      
-      hire_date = Date.today - (1 + rand(365 * 10))
-      resign_date = resigned_indices.include?(i) ? hire_date + rand((Date.today - hire_date).to_i) : nil
+      RECORD_COUNT.times do |i|
+        emp_id = i + 1
+        gender = ["Male", "Female"].sample
+        first_name = gender == "Male" ? male_names.sample : female_names.sample
+        last_name = last_names.sample
+        email = "#{first_name.downcase}.#{last_name.downcase}.#{emp_id}@example-corp.com"
+        birth_date = Date.today - (20 * 365 + rand(45 * 365))
+        
+        job = job_titles_list.sample
+        education = education_list.sample
+        
+        edu_bonus = case education[:id]
+                    when 5 then 1.10
+                    when 4 then 1.05
+                    when 1 then 0.95
+                    else 1.0
+                    end
+        
+        variance = (job[:base_salary] * edu_bonus * 0.15 * (rand - 0.5)).to_i
+        current_salary = (job[:base_salary] * edu_bonus).to_i + variance
+        
+        hire_date = Date.today - (1 + rand(365 * 10))
+        resign_date = resigned_indices.include?(i) ? hire_date + rand((Date.today - hire_date).to_i) : nil
 
-      csv_emp << [emp_id, first_name, last_name, email, gender, birth_date, job[:id], education[:id], salary, hire_date, resign_date]
+        csv_emp << [emp_id, first_name, last_name, email, gender, birth_date, job[:id], education[:id], current_salary, hire_date, resign_date]
 
-      # Satisfaction score (NPS: 0-10)
-      # Skew slightly positive, but detractors exist
-      score = [rand(11), rand(7..10), rand(8..10)].sample 
-      survey_date = Date.today - rand(30) # Surveyed in last month
-      feedback = ["Great company!", "Love the culture", "Need better coffee", "Growth opportunities are good", "Work-life balance is okay", "Excellent benefits"].sample
+        # 1. Satisfaction Data
+        score = [rand(11), rand(7..10), rand(8..10)].sample 
+        survey_date = Date.today - rand(30)
+        feedback = ["Great company!", "Love the culture", "Need better coffee", "Growth opportunities are good", "Work-life balance is okay", "Excellent benefits"].sample
+        csv_sat << [emp_id, score, survey_date, feedback]
 
-      csv_sat << [emp_id, score, survey_date, feedback]
+        # 2. Salary History Data
+        # Start at hire_date with a lower salary, then increase every ~1-2 years
+        histories = []
+        temp_date = hire_date
+        temp_salary = (current_salary * (0.7 + rand(0.2))).to_i # Start at 70-90% of current
+        
+        while temp_date < (resign_date || Date.today)
+          histories << { salary: temp_salary, date: temp_date }
+          
+          # Next increase in 12-24 months
+          temp_date = temp_date >> (12 + rand(12))
+          # Salary increase 3-7%
+          temp_salary = (temp_salary * (1.03 + rand(0.04))).to_i
+          
+          break if temp_date >= (resign_date || Date.today)
+        end
+
+        # Ensure the last record is the current salary and set effective date
+        if histories.empty?
+          csv_sal << [emp_id, current_salary, hire_date]
+        else
+          # Update the last history entry to be current salary for consistency
+          # Or just add a final one
+          histories.each { |h| csv_sal << [emp_id, h[:salary], h[:date]] }
+          
+          # If the last history is too old, add the current one
+          if histories.last[:date] < (Date.today - 30)
+             # Don't strictly need this but good for data completeness
+          end
+        end
+      end
     end
   end
 end
 
-puts "Successfully generated normalized data and satisfaction surveys (NPS Ready)."
+puts "Successfully generated normalized data, satisfaction surveys, and salary histories."
