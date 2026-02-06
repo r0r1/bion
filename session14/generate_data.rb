@@ -3,6 +3,7 @@ require 'date'
 
 # Configuration
 RECORD_COUNT = 1000
+RESIGN_COUNT = 70
 
 # Sample Data
 job_titles_list = [
@@ -22,7 +23,8 @@ job_titles_list = [
   { id: 14, title: "Office Manager", department: "Administration", base_salary: 50000 }
 ]
 
-first_names = ["James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda", "David", "Elizabeth", "William", "Barbara", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Christopher", "Karen", "Charles", "Lisa", "Daniel", "Nancy", "Matthew", "Betty", "Anthony", "Sandra", "Mark", "Margaret", "Donald", "Ashley", "Steven", "Kimberly", "Paul", "Emily", "Andrew", "Donna", "Joshua", "Michelle", "Kevin", "Dorothy", "Brian", "Carol", "George", "Amanda", "Edward", "Melissa", "Ronald", "Deborah"]
+male_names = ["James", "Robert", "John", "Michael", "David", "William", "Richard", "Joseph", "Thomas", "Christopher", "Charles", "Daniel", "Matthew", "Anthony", "Mark", "Donald", "Steven", "Paul", "Andrew", "Joshua", "Kevin", "Brian", "George", "Edward", "Ronald"]
+female_names = ["Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan", "Jessica", "Sarah", "Karen", "Lisa", "Nancy", "Betty", "Sandra", "Margaret", "Ashley", "Kimberly", "Emily", "Donna", "Michelle", "Dorothy", "Carol", "Amanda", "Melissa", "Deborah"]
 last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts"]
 
 # 1. Generate Job Titles CSV
@@ -33,26 +35,36 @@ CSV.open("job_titles.csv", "wb") do |csv|
   end
 end
 
-# 2. Generate Employees CSV
+# Select 70 random employee IDs to resign
+resigned_indices = (0...RECORD_COUNT).to_a.sample(RESIGN_COUNT)
+
+# 2. Generate Employees CSV (including department and resign_date)
 CSV.open("employees.csv", "wb") do |csv|
-  csv << ["id", "first_name", "last_name", "email", "job_title_id", "salary", "hire_date"]
+  csv << ["id", "first_name", "last_name", "email", "gender", "birth_date", "job_title_id", "department", "salary", "hire_date", "resign_date"]
 
   RECORD_COUNT.times do |i|
-    first_name = first_names.sample
+    gender = ["Male", "Female"].sample
+    first_name = gender == "Male" ? male_names.sample : female_names.sample
     last_name = last_names.sample
     email = "#{first_name.downcase}.#{last_name.downcase}.#{i + 1}@example-corp.com"
     
+    birth_date = Date.today - (20 * 365 + rand(45 * 365))
+    
     job = job_titles_list.sample
-    # Add some variance to salary (+/- 20% of base)
     variance = (job[:base_salary] * 0.2 * (rand - 0.5)).to_i
     salary = job[:base_salary] + variance
     
-    hire_date = Date.today - rand(365 * 15) # Hired in last 15 years
+    hire_date = Date.today - (1 + rand(365 * 10))
+    
+    resign_date = nil
+    if resigned_indices.include?(i)
+      # Resign date must be after hire date and before today
+      days_worked = (Date.today - hire_date).to_i
+      resign_date = hire_date + rand(days_worked)
+    end
 
-    csv << [i + 1, first_name, last_name, email, job[:id], salary, hire_date]
+    csv << [i + 1, first_name, last_name, email, gender, birth_date, job[:id], job[:department], salary, hire_date, resign_date]
   end
 end
 
-puts "Successfully generated:"
-puts "- job_titles.csv (14 rows)"
-puts "- employees.csv (1000 rows)"
+puts "Successfully updated data generator with department and resign_date (70 records)."
